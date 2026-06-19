@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import type { PhyloNode } from '../types';
 
 const props = defineProps<{
@@ -7,6 +7,9 @@ const props = defineProps<{
 }>();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+const containerRef = ref<HTMLDivElement | null>(null);
+
+let resizeObserver: ResizeObserver | null = null;
 
 function countLeaves(node: PhyloNode): number {
   if (node.children.length === 0) return 1;
@@ -20,10 +23,15 @@ function getMaxDepth(node: PhyloNode, current = 0): number {
 
 function drawTree() {
   const canvas = canvasRef.value;
+  const container = containerRef.value;
   if (!canvas || !props.tree) return;
 
-  const width = 500;
-  const height = 400;
+  const containerWidth = container ? container.clientWidth - 32 : 500;
+  const totalLeaves = countLeaves(props.tree);
+  const minHeight = Math.max(300, totalLeaves * 30 + 60);
+  const containerHeight = container ? Math.max(container.clientHeight - 80, minHeight) : minHeight;
+  const width = Math.max(containerWidth, 400);
+  const height = Math.max(containerHeight, 300);
   canvas.width = width;
   canvas.height = height;
 
@@ -34,7 +42,6 @@ function drawTree() {
   ctx.fillStyle = '#111827';
   ctx.fillRect(0, 0, width, height);
 
-  const totalLeaves = countLeaves(props.tree);
   const maxDepth = getMaxDepth(props.tree) || 1;
 
   const leftMargin = 30;
@@ -126,6 +133,19 @@ function drawTree() {
 
 onMounted(() => {
   drawTree();
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      nextTick(() => drawTree());
+    });
+    resizeObserver.observe(containerRef.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
 });
 
 watch(() => props.tree, () => {
@@ -134,18 +154,16 @@ watch(() => props.tree, () => {
 </script>
 
 <template>
-  <div class="bg-gray-900 rounded-lg overflow-hidden">
+  <div ref="containerRef" class="bg-gray-900 rounded-lg overflow-hidden w-full">
     <div class="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
       <h3 class="text-sm font-semibold text-gray-300">系统发育树</h3>
       <span class="text-xs text-gray-500">Neighbor-Joining 法</span>
     </div>
-    <div class="p-4 flex justify-center">
+    <div class="p-4 w-full overflow-auto">
       <canvas
         v-if="tree"
         ref="canvasRef"
-        width="500"
-        height="400"
-        class="border border-gray-700 rounded"
+        class="border border-gray-700 rounded w-full"
       ></canvas>
       <div v-else class="flex items-center justify-center w-full h-64 text-gray-600 text-sm">
         请先加载序列并构建进化树

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import type { AlignmentResult } from '../types';
 
 const props = defineProps<{
@@ -8,6 +8,7 @@ const props = defineProps<{
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const scrollContainer = ref<HTMLDivElement | null>(null);
+const containerRef = ref<HTMLDivElement | null>(null);
 
 const BASE_COLORS: Record<string, string> = {
   A: '#22c55e',
@@ -17,8 +18,11 @@ const BASE_COLORS: Record<string, string> = {
   '-': '#4b5563'
 };
 
+let resizeObserver: ResizeObserver | null = null;
+
 function drawAlignment() {
   const canvas = canvasRef.value;
+  const container = containerRef.value;
   if (!canvas || !props.result) return;
 
   const { aligned1, aligned2 } = props.result;
@@ -26,7 +30,9 @@ function drawAlignment() {
   const cellWidth = 12;
   const cellHeight = 22;
   const padding = 10;
-  const width = Math.max(len * cellWidth + padding * 2, 600);
+  const minWidth = len * cellWidth + padding * 2;
+  const containerWidth = container ? container.clientWidth - 32 : 0;
+  const width = Math.max(minWidth, containerWidth, 600);
   const height = 100;
 
   canvas.width = width;
@@ -86,6 +92,19 @@ function drawAlignment() {
 
 onMounted(() => {
   drawAlignment();
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      nextTick(() => drawAlignment());
+    });
+    resizeObserver.observe(containerRef.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
 });
 
 watch(() => props.result, () => {
@@ -94,7 +113,7 @@ watch(() => props.result, () => {
 </script>
 
 <template>
-  <div class="bg-gray-900 rounded-lg overflow-hidden">
+  <div ref="containerRef" class="bg-gray-900 rounded-lg overflow-hidden w-full">
     <div v-if="result" class="space-y-3">
       <!-- Stats -->
       <div class="flex items-center gap-4 px-4 py-2 bg-gray-800 text-sm">

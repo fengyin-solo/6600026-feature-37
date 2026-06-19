@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import type { GCContent } from '../types';
 
 const props = defineProps<{
@@ -7,12 +7,17 @@ const props = defineProps<{
 }>();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+const containerRef = ref<HTMLDivElement | null>(null);
+
+let resizeObserver: ResizeObserver | null = null;
 
 function drawChart() {
   const canvas = canvasRef.value;
+  const container = containerRef.value;
   if (!canvas || !props.data || props.data.length === 0) return;
 
-  const width = 600;
+  const containerWidth = container ? container.clientWidth - 32 : 600;
+  const width = Math.max(containerWidth, 400);
   const height = 200;
   canvas.width = width;
   canvas.height = height;
@@ -136,6 +141,19 @@ function drawChart() {
 
 onMounted(() => {
   drawChart();
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      nextTick(() => drawChart());
+    });
+    resizeObserver.observe(containerRef.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
 });
 
 watch(() => props.data, () => {
@@ -144,20 +162,18 @@ watch(() => props.data, () => {
 </script>
 
 <template>
-  <div class="bg-gray-900 rounded-lg overflow-hidden">
+  <div ref="containerRef" class="bg-gray-900 rounded-lg overflow-hidden w-full">
     <div class="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
       <h3 class="text-sm font-semibold text-gray-300">GC含量分析</h3>
       <span v-if="data.length > 0" class="text-xs text-gray-500">
         {{ data.length }} 个数据点
       </span>
     </div>
-    <div class="p-4 flex justify-center">
+    <div class="p-4 w-full">
       <canvas
         v-if="data.length > 0"
         ref="canvasRef"
-        width="600"
-        height="200"
-        class="border border-gray-700 rounded"
+        class="border border-gray-700 rounded w-full"
       ></canvas>
       <div v-else class="flex items-center justify-center w-full h-48 text-gray-600 text-sm">
         请选择序列并分析GC含量
